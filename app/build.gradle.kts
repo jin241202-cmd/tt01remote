@@ -36,15 +36,6 @@ android {
     composeOptions {
         kotlinCompilerExtensionVersion = "1.5.14"
     }
-
-    // .proto files live in src/main/proto — see build note below.
-    sourceSets {
-        getByName("main") {
-            proto {
-                srcDir("src/main/proto")
-            }
-        }
-    }
 }
 
 protobuf {
@@ -76,7 +67,6 @@ dependencies {
     implementation("com.google.protobuf:protobuf-javalite:3.25.3")
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.8.1")
 
-    // Used to generate the self-signed client certificate needed for pairing.
     implementation("org.bouncycastle:bcprov-jdk18on:1.78.1")
     implementation("org.bouncycastle:bcpkix-jdk18on:1.78.1")
 
