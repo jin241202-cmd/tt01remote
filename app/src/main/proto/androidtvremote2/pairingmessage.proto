@@ -1,0 +1,77 @@
+// NOTE: Unlike remotemessage.proto (fetched verbatim from the public
+// reference implementation), this file is a best-effort reconstruction
+// based on the publicly documented Android TV Remote pairing protocol v2
+// (which flattens Google's original "polo" pairing protocol messages —
+// see https://android.googlesource.com/platform/external/google-tv-pairing-protocol
+// — into a single wrapper message, the same pattern remotemessage.proto
+// uses for RemoteMessage). The field numbers below reuse the original
+// polo.proto MessageType ordinals (10/11/20/30/31/40/41), which is the
+// convention this family of protocols follows.
+//
+// If pairing fails, compare this against the authoritative source before
+// debugging anything else:
+//   https://github.com/tronikos/androidtvremote2/blob/main/src/androidtvremote2/pairingmessage.proto
+// (download it and replace this file — the rest of the app does not need
+// to change).
+
+syntax = "proto3";
+
+package pairing;
+
+option java_package = "com.example.tt01remote.proto";
+option java_multiple_files = true;
+
+message PairingRequest {
+  string service_name = 1;
+  string client_name = 2;
+}
+
+message PairingRequestAck {
+  string server_name = 1;
+}
+
+message PairingEncoding {
+  enum EncodingType {
+    ENCODING_TYPE_UNKNOWN = 0;
+    ENCODING_TYPE_ALPHANUMERIC = 1;
+    ENCODING_TYPE_NUMERIC = 2;
+    ENCODING_TYPE_HEXADECIMAL = 3;
+    ENCODING_TYPE_QRCODE = 4;
+  }
+  EncodingType type = 1;
+  int32 symbol_length = 2;
+}
+
+message PairingOption {
+  repeated PairingEncoding input_encodings = 1;
+  repeated PairingEncoding output_encodings = 2;
+  int32 preferred_role = 3;
+}
+
+message PairingConfiguration {
+  PairingEncoding encoding = 1;
+  int32 client_role = 2;
+}
+
+message PairingConfigurationAck {
+}
+
+message PairingSecret {
+  bytes secret = 1;
+}
+
+message PairingSecretAck {
+  bytes secret = 1;
+}
+
+message PairingMessage {
+  int32 protocol_version = 1;
+  int32 status = 2;
+  PairingRequest pairing_request = 10;
+  PairingRequestAck pairing_request_ack = 11;
+  PairingOption pairing_option = 20;
+  PairingConfiguration pairing_configuration = 30;
+  PairingConfigurationAck pairing_configuration_ack = 31;
+  PairingSecret pairing_secret = 40;
+  PairingSecretAck pairing_secret_ack = 41;
+}
