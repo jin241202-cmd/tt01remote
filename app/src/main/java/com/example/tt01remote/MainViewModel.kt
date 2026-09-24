@@ -3,6 +3,8 @@ package com.example.tt01remote
 import android.app.Application
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
+import com.example.tt01remote.hid.HidRemoteController
+import com.example.tt01remote.hid.HidState
 import com.example.tt01remote.net.PairingClient
 import com.example.tt01remote.net.RemoteClient
 import com.example.tt01remote.proto.RemoteKeyCode
@@ -10,10 +12,13 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.launch
 
-enum class Screen { ENTER_IP, ENTER_PIN, CONNECTED, ERROR }
+enum class Screen {
+    MODE_SELECT, ENTER_IP, ENTER_PIN, CONNECTED,
+    BT_WAITING, BT_CONNECTED, ERROR
+}
 
 data class UiState(
-    val screen: Screen = Screen.ENTER_IP,
+    val screen: Screen = Screen.MODE_SELECT,
     val host: String = "",
     val message: String = "",
     val busy: Boolean = false,
@@ -26,6 +31,38 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
 
     private var pairingClient: PairingClient? = null
     private var remoteClient: RemoteClient? = null
+    private var hidController: HidRemoteController? = null
+
+    // ---- Mode select ----
+
+    fun chooseWifiMode() {
+        _state.value = _state.value.copy(screen = Screen.ENTER_IP, message = "")
+    }
+
+    /** Call only after BLUETOOTH_CONNECT has been granted. */
+    fun chooseBluetoothMode() {
+        val controller = HidRemoteController(getApplication())
+        hidController = controller
+        controller.onStateChanged = { hidState ->
+            when (hidState) {
+                HidState.WAITING_FOR_PAIRING -> _state.value = _state.value.copy(
+                    screen = Screen.BT_WAITING, busy = false,
+                    message = "TT01のBluetooth設定から「TT01 Remote」を選んでペアリングしてください"
+                )
+                HidState.CONNECTED -> _state.value = _state.value.copy(
+                    screen = Screen.BT_CONNECTED, busy = false, message = ""
+                )
+                HidState.UNAVAILABLE -> _state.value = _state.value.copy(
+                    screen = Screen.ERROR, busy = false,
+                    message = "Bluetoothを利用できません。端末のBluetoothがONになっているか確認してください。"
+                )
+            }
+        }
+        _state.value = _state.value.copy(screen = Screen.BT_WAITING, busy = true, message = "")
+        controller.start()
+    }
+
+    // ---- Wi-Fi / network flow ----
 
     fun startPairing(host: String) {
         _state.value = _state.value.copy(busy = true, message = "", host = host)
@@ -85,17 +122,25 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         viewModelScope.launch { remoteClient?.sendKey(keyCode) }
     }
 
+    // ---- Bluetooth HID button actions ----
+
+    fun sendBtKey(usageId: Int) = hidController?.sendKey(usageId)
+    fun sendBtConsumer(usageId: Int) = hidController?.sendConsumer(usageId)
+
     fun reset() {
         pairingClient?.close()
         remoteClient?.close()
+        hidController?.stop()
         pairingClient = null
         remoteClient = null
+        hidController = null
         _state.value = UiState()
     }
 
     override fun onCleared() {
         pairingClient?.close()
         remoteClient?.close()
+        hidController?.stop()
         super.onCleared()
     }
 }

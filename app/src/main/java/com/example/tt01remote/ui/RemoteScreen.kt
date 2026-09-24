@@ -25,14 +25,19 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import com.example.tt01remote.Screen
 import com.example.tt01remote.UiState
+import com.example.tt01remote.hid.HidDescriptor
 import com.example.tt01remote.proto.RemoteKeyCode
 
 @Composable
 fun RemoteScreen(
     state: UiState,
+    onChooseWifi: () -> Unit,
+    onChooseBluetooth: () -> Unit,
     onConnect: (String) -> Unit,
     onSubmitPin: (String) -> Unit,
     onKey: (RemoteKeyCode) -> Unit,
+    onBtKey: (Int) -> Unit,
+    onBtConsumer: (Int) -> Unit,
     onReset: () -> Unit,
 ) {
     Column(
@@ -43,12 +48,33 @@ fun RemoteScreen(
         verticalArrangement = Arrangement.Center,
     ) {
         when (state.screen) {
+            Screen.MODE_SELECT -> ModeSelect(onChooseWifi, onChooseBluetooth)
             Screen.ENTER_IP -> EnterIpForm(state, onConnect)
             Screen.ENTER_PIN -> EnterPinForm(state, onSubmitPin)
             Screen.CONNECTED -> RemotePad(onKey, onReset)
+            Screen.BT_WAITING -> BtWaiting(state, onReset)
+            Screen.BT_CONNECTED -> BtRemotePad(onBtKey, onBtConsumer, onReset)
             Screen.ERROR -> ErrorView(state, onReset)
         }
     }
+}
+
+@Composable
+private fun ModeSelect(onChooseWifi: () -> Unit, onChooseBluetooth: () -> Unit) {
+    Text("接続方法を選択", style = MaterialTheme.typography.titleLarge)
+    Spacer(Modifier.height(24.dp))
+    Button(onClick = onChooseWifi, modifier = Modifier.fillMaxWidth()) {
+        Text("Wi-Fi経由で接続")
+    }
+    Spacer(Modifier.height(12.dp))
+    Button(onClick = onChooseBluetooth, modifier = Modifier.fillMaxWidth()) {
+        Text("Bluetooth経由で接続")
+    }
+    Spacer(Modifier.height(16.dp))
+    Text(
+        "docomoのペアリングサービス終了により、Wi-Fi経由はTT01では動作しない場合があります。Bluetoothの方が確実です。",
+        style = MaterialTheme.typography.bodySmall
+    )
 }
 
 @Composable
@@ -103,8 +129,29 @@ private fun EnterPinForm(state: UiState, onSubmitPin: (String) -> Unit) {
 }
 
 @Composable
+private fun BtWaiting(state: UiState, onReset: () -> Unit) {
+    Text("Bluetoothペアリング待ち", style = MaterialTheme.typography.titleLarge)
+    Spacer(Modifier.height(16.dp))
+    if (state.busy) {
+        CircularProgressIndicator()
+        Spacer(Modifier.height(16.dp))
+    }
+    Text(
+        "TT01側の「設定 > リモコンとアクセサリ」(または Bluetooth設定)を開き、\n" +
+            "新しいデバイスを追加 → 「TT01 Remote」を選んでペアリングしてください。",
+        style = MaterialTheme.typography.bodyMedium
+    )
+    if (state.message.isNotBlank()) {
+        Spacer(Modifier.height(16.dp))
+        Text(state.message, style = MaterialTheme.typography.bodySmall)
+    }
+    Spacer(Modifier.height(24.dp))
+    OutlinedButton(onClick = onReset) { Text("戻る") }
+}
+
+@Composable
 private fun RemotePad(onKey: (RemoteKeyCode) -> Unit, onReset: () -> Unit) {
-    Text("TT01 リモコン", style = MaterialTheme.typography.titleLarge)
+    Text("TT01 リモコン (Wi-Fi)", style = MaterialTheme.typography.titleLarge)
     Spacer(Modifier.height(24.dp))
 
     Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
@@ -115,7 +162,6 @@ private fun RemotePad(onKey: (RemoteKeyCode) -> Unit, onReset: () -> Unit) {
 
     Spacer(Modifier.height(24.dp))
 
-    // D-pad
     RemoteButton("▲", onKey, RemoteKeyCode.KEYCODE_DPAD_UP)
     Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
         RemoteButton("◀", onKey, RemoteKeyCode.KEYCODE_DPAD_LEFT)
@@ -137,11 +183,51 @@ private fun RemotePad(onKey: (RemoteKeyCode) -> Unit, onReset: () -> Unit) {
 }
 
 @Composable
+private fun BtRemotePad(onBtKey: (Int) -> Unit, onBtConsumer: (Int) -> Unit, onReset: () -> Unit) {
+    Text("TT01 リモコン (Bluetooth)", style = MaterialTheme.typography.titleLarge)
+    Spacer(Modifier.height(24.dp))
+
+    Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
+        ConsumerButton("電源", onBtConsumer, HidDescriptor.Consumer.POWER)
+        ConsumerButton("ホーム", onBtConsumer, HidDescriptor.Consumer.HOME)
+        KeyButton("戻る", onBtKey, HidDescriptor.Key.BACK)
+    }
+
+    Spacer(Modifier.height(24.dp))
+
+    KeyButton("▲", onBtKey, HidDescriptor.Key.UP)
+    Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
+        KeyButton("◀", onBtKey, HidDescriptor.Key.LEFT)
+        KeyButton("決定", onBtKey, HidDescriptor.Key.SELECT)
+        KeyButton("▶", onBtKey, HidDescriptor.Key.RIGHT)
+    }
+    KeyButton("▼", onBtKey, HidDescriptor.Key.DOWN)
+
+    Spacer(Modifier.height(24.dp))
+
+    Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
+        ConsumerButton("音量+", onBtConsumer, HidDescriptor.Consumer.VOLUME_UP)
+        ConsumerButton("消音", onBtConsumer, HidDescriptor.Consumer.MUTE)
+        ConsumerButton("音量-", onBtConsumer, HidDescriptor.Consumer.VOLUME_DOWN)
+    }
+
+    Spacer(Modifier.height(32.dp))
+    OutlinedButton(onClick = onReset) { Text("接続をやり直す") }
+}
+
+@Composable
 private fun RemoteButton(label: String, onKey: (RemoteKeyCode) -> Unit, code: RemoteKeyCode) {
-    Button(
-        onClick = { onKey(code) },
-        modifier = Modifier.size(72.dp),
-    ) { Text(label) }
+    Button(onClick = { onKey(code) }, modifier = Modifier.size(72.dp)) { Text(label) }
+}
+
+@Composable
+private fun KeyButton(label: String, onKey: (Int) -> Unit, usageId: Int) {
+    Button(onClick = { onKey(usageId) }, modifier = Modifier.size(72.dp)) { Text(label) }
+}
+
+@Composable
+private fun ConsumerButton(label: String, onConsumer: (Int) -> Unit, usageId: Int) {
+    Button(onClick = { onConsumer(usageId) }, modifier = Modifier.size(72.dp)) { Text(label) }
 }
 
 @Composable
